@@ -1,7 +1,6 @@
-// TURBO: Tener y Estar — v4
-// Adds explicit "(you: singular/plural)" in prompts when the subject is 'you'.
-// Level buttons start locked (red, padlock). Unlock next level by original time thresholds.
-// Keeps vertical feedback, tinted inputs, and best score display per level (overall across tenses).
+// TURBO: Tener y Estar — v5
+// Unlocking is PER TENSE & PER LEVEL. Present progress won't unlock Past/Future.
+// Best time stored and displayed per (tense, level). Includes you(sg/pl) clarifiers and grammar fixes.
 
 (() => {
   const $ = sel => document.querySelector(sel);
@@ -10,14 +9,13 @@
   const tenses = ["Present","Past","Future"];
   const levels = ["A1","A2","B1","B2","C1","C2","Boss"];
   const unlockThresholds = {
-    // threshold needed on CURRENT level to unlock the NEXT level
-    "A1": 90,   // unlock A2
-    "A2": 85,   // unlock B1  (Level 3 in original notes)
-    "B1": 80,   // unlock B2
-    "B2": 75,   // unlock C1
-    "C1": 65,   // unlock C2
-    "C2": 60,   // unlock Boss
-    "Boss": 50  // final benchmark (no further unlock, but recorded)
+    "A1": 90,
+    "A2": 85,
+    "B1": 80,
+    "B2": 75,
+    "C1": 65,
+    "C2": 60,
+    "Boss": 50
   };
 
   const QUESTIONS_PER_RUN = 10;
@@ -47,8 +45,6 @@
   function doNegPresentHave(subj, tag){
     return `${capitalise(subj)}${tag} ${isThird(subj) ? 'does' : 'do'} not have`;
   }
-
-  function subWithTag(p){ return p.en + (p.youTag || ""); }
 
   function bePresent(subj){
     if(subj==="I") return "am";
@@ -93,7 +89,7 @@
     return {pos, neg, q};
   }
 
-  // English prompts (with 'you' qualifiers)
+  // English prompts
   function englishPrompt(verb, tense, person, kind){
     const subj = person.en;
     const tag = person.youTag || "";
@@ -153,26 +149,16 @@
       .trim();
   }
 
-  // ---- Level locking & labels ----
-  function keyBestOverall(level){ return `turbo_te_overall_best_${level}`; }
-  function getBestOverall(level){
-    const v = localStorage.getItem(keyBestOverall(level));
+  // ---- Best per (tense, level) & unlocking per (tense) ----
+  function keyBest(tense, level){ return `turbo_te_best_${tense}_${level}`; }
+  function getBest(tense, level){
+    const v = localStorage.getItem(keyBest(tense, level));
     return v ? parseFloat(v) : null;
   }
-  function saveBestOverall(level, score){
-    const cur = getBestOverall(level);
+  function saveBest(tense, level, score){
+    const cur = getBest(tense, level);
     const best = (cur == null || score < cur) ? score : cur;
-    localStorage.setItem(keyBestOverall(level), best.toString());
-  }
-
-  function isUnlocked(level){
-    if(level === "A1") return true; // first level always available
-    // check previous level's best against its threshold
-    const prev = prevLevel(level);
-    if(!prev) return true;
-    const bestPrev = getBestOverall(prev);
-    const need = unlockThresholds[prev];
-    return (bestPrev != null && need != null && bestPrev <= need);
+    localStorage.setItem(keyBest(tense, level), best.toString());
   }
 
   function prevLevel(level){
@@ -180,13 +166,21 @@
     return i > 0 ? levels[i-1] : null;
   }
 
+  function isUnlocked(tense, level){
+    // A1 for each tense is unlocked by default
+    if(level === "A1") return true;
+    const prev = prevLevel(level);
+    if(!prev) return true;
+    const bestPrev = getBest(tense, prev);
+    const need = unlockThresholds[prev];
+    return (bestPrev != null && need != null && bestPrev <= need);
+  }
+
   function labelForLevel(level){
-    const best = getBestOverall(level);
-    const lock = !isUnlocked(level);
-    const icon = lock ? "🔒" : "🔓";
-    return best != null
-      ? `${icon} ${level} — Best: ${best.toFixed(1)}s`
-      : `${icon} ${level}`;
+    const best = getBest(currentTense, level);
+    const locked = !isUnlocked(currentTense, level);
+    const icon = locked ? "🔒" : "🔓";
+    return best != null ? `${icon} ${level} — Best: ${best.toFixed(1)}s` : `${icon} ${level}`;
   }
 
   function renderLevels(){
@@ -197,11 +191,8 @@
       btn.className = "level-btn";
       btn.dataset.level = lv;
       btn.textContent = labelForLevel(lv);
-      const locked = !isUnlocked(lv);
-      btn.disabled = locked;
-      btn.addEventListener("click", () => {
-        if(!btn.disabled) startLevel(lv);
-      });
+      btn.disabled = !isUnlocked(currentTense, lv);
+      btn.addEventListener("click", () => { if(!btn.disabled) startLevel(lv); });
       host.appendChild(btn);
     });
   }
@@ -210,7 +201,7 @@
     $$("#level-list .level-btn").forEach(btn => {
       const lv = btn.dataset.level;
       btn.textContent = labelForLevel(lv);
-      btn.disabled = !isUnlocked(lv);
+      btn.disabled = !isUnlocked(currentTense, lv);
     });
   }
 
@@ -222,8 +213,8 @@
         currentTense = b.dataset.tense;
         $$(".tense-button").forEach(x => x.classList.remove("active"));
         b.classList.add("active");
-        // labels don't change with tense now, unlocks are overall
-        refreshLevelButtons();
+        // Re-render to reflect per-tense locks & bests
+        renderLevels();
       };
     });
   }
@@ -294,9 +285,9 @@
     const penalty = (quiz.length - correct) * 30;
     const finalTime = elapsed + penalty;
 
-    // Save best overall for this level
+    // Save best for (tense, level)
     if (currentLevel) {
-      saveBestOverall(currentLevel, finalTime);
+      saveBest(currentTense, currentLevel, finalTime);
     }
 
     // Build feedback list
@@ -323,8 +314,7 @@
     $("#back-button").onclick = () => {
       $("#game").style.display = "none";
       $("#level-list").style.display = "flex";
-      // after returning, refresh to show best & unlock state
-      refreshLevelButtons();
+      renderLevels(); // reflect per-tense progress
     };
   }
 
@@ -338,18 +328,4 @@
   // init
   renderLevels();
   setTenseButtons();
-
-  function renderLevels(){
-    const host = $("#level-list");
-    host.innerHTML = "";
-    levels.forEach(lv => {
-      const btn = document.createElement("button");
-      btn.className = "level-btn";
-      btn.dataset.level = lv;
-      btn.textContent = labelForLevel(lv);
-      btn.disabled = !isUnlocked(lv);
-      btn.addEventListener("click", () => { if(!btn.disabled) startLevel(lv); });
-      host.appendChild(btn);
-    });
-  }
 })();

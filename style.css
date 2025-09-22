@@ -1,4 +1,4 @@
-/* User look preserved; small additions for padlocks and tints */ 
+/* Visuals per your suite; padlocks and tints included. */
 body {
   font-family: 'Arial', sans-serif;
   margin: 0;
@@ -93,10 +93,6 @@ h1 span.turbo {
 #level-list button.level-btn:disabled {
   background-color: #e74c3c; /* red when locked */
   cursor: not-allowed;
-}
-
-#level-list .pad {
-  margin-right: 6px;
 }
 
 #game {
