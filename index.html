@@ -1,36 +1,33 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>TURBO: Tener y Estar</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div class="container">
-    <h1><span class="turbo">TURBO:</span> Tener y Estar</h1>
+    <h1><span class="turbo">TURBO</span>: Tener y Estar</h1>
 
-    <!-- Tense Buttons -->
-    <div id="tense-buttons" class="tense-bar">
+    <div id="tense-buttons" role="toolbar" aria-label="Tense selection">
       <button class="tense-button active" data-tense="Present">Present</button>
       <button class="tense-button" data-tense="Past">Past</button>
       <button class="tense-button" data-tense="Future">Future</button>
     </div>
 
-    <!-- Level Selection Section -->
-    <div id="level-list" class="levels"></div>
+    <div id="level-list"></div>
 
-    <!-- Game Section -->
-    <div id="game" style="display: none;">
-      <div id="timer" class="timer">Time: 0s</div>
+    <div id="game" style="display:none;">
+      <div id="timer">Time: 0s</div>
       <div id="questions"></div>
-      <button id="submit" class="primary">Check Answers</button>
+      <div>
+        <button id="submit">Check Answers</button>
+        <button id="back-button" style="display:none;">Back to Levels</button>
+      </div>
       <div id="results"></div>
-      <button id="back" class="secondary" style="display:none;">Back to Levels</button>
     </div>
   </div>
-
-  <!-- script always at the end -->
   <script src="script.js"></script>
 </body>
 </html>
