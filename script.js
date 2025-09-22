@@ -1,7 +1,7 @@
-// TURBO: Tener y Estar — v3
-// Fix present 3rd-person negative for 'have' (does not have).
-// Feedback is a vertical, color-coded list; inputs tint green/red after submit.
-// Best score (min final time) shown on the level button for each (tense, level).
+// TURBO: Tener y Estar — v4
+// Adds explicit "(you: singular/plural)" in prompts when the subject is 'you'.
+// Level buttons start locked (red, padlock). Unlock next level by original time thresholds.
+// Keeps vertical feedback, tinted inputs, and best score display per level (overall across tenses).
 
 (() => {
   const $ = sel => document.querySelector(sel);
@@ -9,6 +9,17 @@
 
   const tenses = ["Present","Past","Future"];
   const levels = ["A1","A2","B1","B2","C1","C2","Boss"];
+  const unlockThresholds = {
+    // threshold needed on CURRENT level to unlock the NEXT level
+    "A1": 90,   // unlock A2
+    "A2": 85,   // unlock B1  (Level 3 in original notes)
+    "B1": 80,   // unlock B2
+    "B2": 75,   // unlock C1
+    "C1": 65,   // unlock C2
+    "C2": 60,   // unlock Boss
+    "Boss": 50  // final benchmark (no further unlock, but recorded)
+  };
+
   const QUESTIONS_PER_RUN = 10;
 
   let currentTense = "Present";
@@ -17,25 +28,27 @@
   let timerId = null;
 
   const persons = [
-    {key:"I", en:"I", es:{tener:"tengo",   estar:"estoy"},     past:{tener:"tuve",     estar:"estuve"},     fut:{tener:"tendré",   estar:"estaré"}},
-    {key:"you (sg.)", en:"you", es:{tener:"tienes",  estar:"estás"},     past:{tener:"tuviste",  estar:"estuviste"},  fut:{tener:"tendrás",  estar:"estarás"}},
-    {key:"he", en:"he", es:{tener:"tiene",   estar:"está"},      past:{tener:"tuvo",     estar:"estuvo"},     fut:{tener:"tendrá",   estar:"estará"}},
-    {key:"she", en:"she", es:{tener:"tiene",   estar:"está"},      past:{tener:"tuvo",     estar:"estuvo"},     fut:{tener:"tendrá",   estar:"estará"}},
-    {key:"we", en:"we", es:{tener:"tenemos", estar:"estamos"},   past:{tener:"tuvimos",  estar:"estuvimos"},  fut:{tener:"tendremos",estar:"estaremos"}},
-    {key:"you (pl.)", en:"you", es:{tener:"tenéis",  estar:"estáis"},    past:{tener:"tuvisteis",estar:"estuvisteis"},fut:{tener:"tendréis", estar:"estaréis"}},
-    {key:"they", en:"they", es:{tener:"tienen", estar:"están"},    past:{tener:"tuvieron", estar:"estuvieron"}, fut:{tener:"tendrán",  estar:"estarán"}},
+    {key:"I", en:"I", youTag:"", es:{tener:"tengo",   estar:"estoy"},     past:{tener:"tuve",     estar:"estuve"},     fut:{tener:"tendré",   estar:"estaré"}},
+    {key:"you (sg.)", en:"you", youTag:" (you: singular)", es:{tener:"tienes",  estar:"estás"},     past:{tener:"tuviste",  estar:"estuviste"},  fut:{tener:"tendrás",  estar:"estarás"}},
+    {key:"he", en:"he", youTag:"", es:{tener:"tiene",   estar:"está"},      past:{tener:"tuvo",     estar:"estuvo"},     fut:{tener:"tendrá",   estar:"estará"}},
+    {key:"she", en:"she", youTag:"", es:{tener:"tiene",   estar:"está"},      past:{tener:"tuvo",     estar:"estuvo"},     fut:{tener:"tendrá",   estar:"estará"}},
+    {key:"we", en:"we", youTag:"", es:{tener:"tenemos", estar:"estamos"},   past:{tener:"tuvimos",  estar:"estuvimos"},  fut:{tener:"tendremos",estar:"estaremos"}},
+    {key:"you (pl.)", en:"you", youTag:" (you: plural)", es:{tener:"tenéis",  estar:"estáis"},    past:{tener:"tuvisteis",estar:"estuvisteis"},fut:{tener:"tendréis", estar:"estaréis"}},
+    {key:"they", en:"they", youTag:"", es:{tener:"tienen", estar:"están"},    past:{tener:"tuvieron", estar:"estuvieron"}, fut:{tener:"tendrán",  estar:"estarán"}},
   ];
 
   // ---- English helpers ----
   function capitalise(s){ return s ? s[0].toUpperCase()+s.slice(1) : s; }
   const isThird = subj => (subj === "he" || subj === "she" || subj === "it");
 
-  function doQuestionPresentHave(subj){
-    return `${isThird(subj) ? 'Does' : 'Do'} ${subj} have?`;
+  function doQuestionPresentHave(subj, tag){
+    return `${isThird(subj) ? 'Does' : 'Do'} ${subj}${tag} have?`;
   }
-  function doNegPresentHave(subj){
-    return `${capitalise(subj)} ${isThird(subj) ? 'does' : 'do'} not have`;
+  function doNegPresentHave(subj, tag){
+    return `${capitalise(subj)}${tag} ${isThird(subj) ? 'does' : 'do'} not have`;
   }
+
+  function subWithTag(p){ return p.en + (p.youTag || ""); }
 
   function bePresent(subj){
     if(subj==="I") return "am";
@@ -47,9 +60,11 @@
     if(subj==="I") return "am not";
     return bePresent(subj) + " not";
   }
-  function beQuestionPresent(subj){
-    if(subj==="I") return "Am I?";
-    if(subj==="you") return "Are you?";
+  function beQuestionPresent(p){
+    const subj = p.en;
+    const tag = p.youTag || "";
+    if(subj==="I") return `Am I?`;
+    if(subj==="you") return `Are you${tag}?`;
     if(subj==="we") return "Are we?";
     if(subj==="they") return "Are they?";
     if(subj==="he"||subj==="she"||subj==="it") return `Is ${subj}?`;
@@ -60,8 +75,12 @@
     return "were";
   }
   function bePastNeg(subj){ return bePast(subj) + " not"; }
-  function beQuestionPast(subj){
-    if(subj==="I"||subj==="he"||subj==="she"||subj==="it") return `Was ${subj==='I'?'I':subj}?`.replace("Was I?", "Was I?");
+  function beQuestionPast(p){
+    const subj = p.en;
+    const tag = p.youTag || "";
+    if(subj==="I") return "Was I?";
+    if(subj==="you") return `Were you${tag}?`;
+    if(subj==="he"||subj==="she"||subj==="it") return `Was ${subj}?`;
     return `Were ${subj}?`;
   }
 
@@ -74,37 +93,38 @@
     return {pos, neg, q};
   }
 
-  // English prompts (fixed)
+  // English prompts (with 'you' qualifiers)
   function englishPrompt(verb, tense, person, kind){
     const subj = person.en;
+    const tag = person.youTag || "";
     if (verb === "tener") {
       if (tense === "Present") {
-        if (kind==="pos") return `${capitalise(subj)} have (tener)`;
-        if (kind==="neg") return `${doNegPresentHave(subj)} (tener)`;
-        if (kind==="q")   return `${doQuestionPresentHave(subj)} (tener)`;
+        if (kind==="pos") return `${capitalise(subj)}${tag} have (tener)`;
+        if (kind==="neg") return `${doNegPresentHave(subj, tag)} (tener)`;
+        if (kind==="q")   return `${doQuestionPresentHave(subj, tag)} (tener)`;
       } else if (tense === "Past") {
-        if (kind==="pos") return `${capitalise(subj)} had (tener)`;
-        if (kind==="neg") return `${capitalise(subj)} did not have (tener)`;
-        if (kind==="q")   return `Did ${subj} have? (tener)`;
+        if (kind==="pos") return `${capitalise(subj)}${tag} had (tener)`;
+        if (kind==="neg") return `${capitalise(subj)}${tag} did not have (tener)`;
+        if (kind==="q")   return `Did ${subj}${tag} have? (tener)`;
       } else {
-        if (kind==="pos") return `${capitalise(subj)} will have (tener)`;
-        if (kind==="neg") return `${capitalise(subj)} will not have (tener)`;
-        if (kind==="q")   return `Will ${subj} have? (tener)`;
+        if (kind==="pos") return `${capitalise(subj)}${tag} will have (tener)`;
+        if (kind==="neg") return `${capitalise(subj)}${tag} will not have (tener)`;
+        if (kind==="q")   return `Will ${subj}${tag} have? (tener)`;
       }
     } else {
       // estar
       if (tense === "Present") {
-        if (kind==="pos") return `${capitalise(subj)} ${bePresent(subj)} (estar)`;
-        if (kind==="neg") return `${capitalise(subj)} ${bePresentNeg(subj)} (estar)`;
-        if (kind==="q")   return `${beQuestionPresent(subj)} (estar)`;
+        if (kind==="pos") return `${capitalise(subj)}${tag} ${bePresent(subj)} (estar)`;
+        if (kind==="neg") return `${capitalise(subj)}${tag} ${bePresentNeg(subj)} (estar)`;
+        if (kind==="q")   return `${beQuestionPresent(person)} (estar)`;
       } else if (tense === "Past") {
-        if (kind==="pos") return `${capitalise(subj)} ${bePast(subj)} (estar)`;
-        if (kind==="neg") return `${capitalise(subj)} ${bePastNeg(subj)} (estar)`;
-        if (kind==="q")   return `${beQuestionPast(subj)} (estar)`;
+        if (kind==="pos") return `${capitalise(subj)}${tag} ${bePast(subj)} (estar)`;
+        if (kind==="neg") return `${capitalise(subj)}${tag} ${bePastNeg(subj)} (estar)`;
+        if (kind==="q")   return `${beQuestionPast(person)} (estar)`;
       } else {
-        if (kind==="pos") return `${capitalise(subj)} will be (estar)`;
-        if (kind==="neg") return `${capitalise(subj)} will not be (estar)`;
-        if (kind==="q")   return `Will ${subj} be? (estar)`;
+        if (kind==="pos") return `${capitalise(subj)}${tag} will be (estar)`;
+        if (kind==="neg") return `${capitalise(subj)}${tag} will not be (estar)`;
+        if (kind==="q")   return `Will ${subj}${tag} be? (estar)`;
       }
     }
   }
@@ -133,6 +153,42 @@
       .trim();
   }
 
+  // ---- Level locking & labels ----
+  function keyBestOverall(level){ return `turbo_te_overall_best_${level}`; }
+  function getBestOverall(level){
+    const v = localStorage.getItem(keyBestOverall(level));
+    return v ? parseFloat(v) : null;
+  }
+  function saveBestOverall(level, score){
+    const cur = getBestOverall(level);
+    const best = (cur == null || score < cur) ? score : cur;
+    localStorage.setItem(keyBestOverall(level), best.toString());
+  }
+
+  function isUnlocked(level){
+    if(level === "A1") return true; // first level always available
+    // check previous level's best against its threshold
+    const prev = prevLevel(level);
+    if(!prev) return true;
+    const bestPrev = getBestOverall(prev);
+    const need = unlockThresholds[prev];
+    return (bestPrev != null && need != null && bestPrev <= need);
+  }
+
+  function prevLevel(level){
+    const i = levels.indexOf(level);
+    return i > 0 ? levels[i-1] : null;
+  }
+
+  function labelForLevel(level){
+    const best = getBestOverall(level);
+    const lock = !isUnlocked(level);
+    const icon = lock ? "🔒" : "🔓";
+    return best != null
+      ? `${icon} ${level} — Best: ${best.toFixed(1)}s`
+      : `${icon} ${level}`;
+  }
+
   function renderLevels(){
     const host = $("#level-list");
     host.innerHTML = "";
@@ -141,25 +197,24 @@
       btn.className = "level-btn";
       btn.dataset.level = lv;
       btn.textContent = labelForLevel(lv);
-      btn.addEventListener("click", () => startLevel(lv));
+      const locked = !isUnlocked(lv);
+      btn.disabled = locked;
+      btn.addEventListener("click", () => {
+        if(!btn.disabled) startLevel(lv);
+      });
       host.appendChild(btn);
     });
-    // refresh labels with any stored bests
-    refreshAllLevelLabels();
   }
 
-  function labelForLevel(level){
-    const best = getBest(currentTense, level);
-    return best != null ? `${level} — Best: ${best.toFixed(1)}s` : level;
-  }
-
-  function refreshAllLevelLabels(){
+  function refreshLevelButtons(){
     $$("#level-list .level-btn").forEach(btn => {
       const lv = btn.dataset.level;
       btn.textContent = labelForLevel(lv);
+      btn.disabled = !isUnlocked(lv);
     });
   }
 
+  // ---- Tense buttons ----
   function setTenseButtons(){
     $$(".tense-button").forEach(b => {
       b.classList.toggle("active", b.dataset.tense === currentTense);
@@ -167,11 +222,13 @@
         currentTense = b.dataset.tense;
         $$(".tense-button").forEach(x => x.classList.remove("active"));
         b.classList.add("active");
-        refreshAllLevelLabels();
+        // labels don't change with tense now, unlocks are overall
+        refreshLevelButtons();
       };
     });
   }
 
+  // ---- Game flow ----
   function startLevel(level){
     currentLevel = level;
     $("#level-list").style.display = "none";
@@ -237,12 +294,12 @@
     const penalty = (quiz.length - correct) * 30;
     const finalTime = elapsed + penalty;
 
-    // Save & refresh best on level button
+    // Save best overall for this level
     if (currentLevel) {
-      saveBest(currentTense, currentLevel, finalTime);
+      saveBestOverall(currentLevel, finalTime);
     }
 
-    // Build vertical feedback list
+    // Build feedback list
     const wrap = document.createElement("div");
     wrap.style.width = "100%";
     const summary = document.createElement("div");
@@ -266,7 +323,8 @@
     $("#back-button").onclick = () => {
       $("#game").style.display = "none";
       $("#level-list").style.display = "flex";
-      refreshAllLevelLabels();
+      // after returning, refresh to show best & unlock state
+      refreshLevelButtons();
     };
   }
 
@@ -277,21 +335,21 @@
     }
   }
 
-  // ---- Best score storage ----
-  function keyForBest(tense, level){
-    return `turbo_te_best_${tense}_${level}`;
-  }
-  function getBest(tense, level){
-    const v = localStorage.getItem(keyForBest(tense, level));
-    return v ? parseFloat(v) : null;
-  }
-  function saveBest(tense, level, score){
-    const cur = getBest(tense, level);
-    const best = (cur == null || score < cur) ? score : cur;
-    localStorage.setItem(keyForBest(tense, level), best.toString());
-  }
-
   // init
   renderLevels();
   setTenseButtons();
+
+  function renderLevels(){
+    const host = $("#level-list");
+    host.innerHTML = "";
+    levels.forEach(lv => {
+      const btn = document.createElement("button");
+      btn.className = "level-btn";
+      btn.dataset.level = lv;
+      btn.textContent = labelForLevel(lv);
+      btn.disabled = !isUnlocked(lv);
+      btn.addEventListener("click", () => { if(!btn.disabled) startLevel(lv); });
+      host.appendChild(btn);
+    });
+  }
 })();

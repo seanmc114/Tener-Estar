@@ -1,3 +1,4 @@
+/* User look preserved; small additions for padlocks and tints */ 
 body {
   font-family: 'Arial', sans-serif;
   margin: 0;
@@ -71,7 +72,7 @@ h1 span.turbo {
   margin-top: 20px;
 }
 
-#level-list button {
+#level-list button.level-btn {
   font-size: 1.3rem;
   padding: 15px;
   background-color: #2ecc71;
@@ -84,14 +85,18 @@ h1 span.turbo {
   transition: transform 0.2s, background-color 0.2s;
 }
 
-#level-list button:hover {
+#level-list button.level-btn:hover:enabled {
   background-color: #27ae60;
   transform: scale(1.05);
 }
 
-#level-list button:disabled {
-  background-color: #e74c3c;
+#level-list button.level-btn:disabled {
+  background-color: #e74c3c; /* red when locked */
   cursor: not-allowed;
+}
+
+#level-list .pad {
+  margin-right: 6px;
 }
 
 #game {
